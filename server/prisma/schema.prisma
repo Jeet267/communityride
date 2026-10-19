@@ -1,0 +1,378 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PASSENGER
+  DRIVER
+  RENTAL_OWNER
+  FLEET_OPERATOR
+  ADMIN
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum VehicleCategory {
+  CAR
+  BIKE
+  SCOOTER
+  BUS
+  MINI_BUS
+  TEMPO_TRAVELLER
+}
+
+enum RideType {
+  CARPOOL
+  GROUP_TOUR
+}
+
+enum RideStatus {
+  PUBLISHED
+  STARTED
+  COMPLETED
+  CANCELLED
+}
+
+enum BookingMode {
+  INSTANT
+  APPROVAL
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  CANCELLED
+  COMPLETED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  REFUNDED
+}
+
+enum RentalMode {
+  SELF_DRIVE
+  WITH_DRIVER
+}
+
+enum RentalStatus {
+  PENDING
+  CONFIRMED
+  ACTIVE
+  RETURNED
+  CANCELLED
+  REJECTED
+}
+
+enum GroupStatus {
+  OPEN_FOR_QUOTES
+  QUOTE_ACCEPTED
+  ALLOCATED
+  CONFIRMED
+  CANCELLED
+}
+
+enum QuoteStatus {
+  SUBMITTED
+  ACCEPTED
+  REJECTED
+}
+
+model User {
+  id                String             @id @default(uuid()) @db.Uuid
+  fullName          String
+  phone             String             @unique
+  email             String?            @unique
+  suspended         Boolean            @default(false)
+  roles             UserRoleRow[]
+  refreshTokens     RefreshToken[]
+  driverProfile     DriverProfile?
+  vehicles          Vehicle[]
+  ridesDriven       Ride[]             @relation("RideDriver")
+  rideBookings      RideBooking[]
+  rentalListings    RentalListing[]
+  rentalBookings    RentalBooking[]
+  groupRequests     GroupRequest[]
+  quotes            GroupQuote[]
+  driverAssignments DriverAssignment[]
+  notifications     Notification[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+}
+
+model UserRoleRow {
+  userId String @db.Uuid
+  role   Role
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, role])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model DriverProfile {
+  id                 String             @id @default(uuid()) @db.Uuid
+  userId             String             @unique @db.Uuid
+  licenceNumberEnc   String
+  licenceDocKey      String?
+  licenceExpiresAt   DateTime
+  verificationStatus VerificationStatus @default(PENDING)
+  rejectionReason    String?
+  ratingAverage      Float              @default(0)
+  ratingCount        Int                @default(0)
+  user               User               @relation(fields: [userId], references: [id])
+}
+
+model Vehicle {
+  id                 String             @id @default(uuid()) @db.Uuid
+  ownerUserId        String             @db.Uuid
+  category           VehicleCategory
+  make               String
+  model              String
+  registrationEnc    String
+  seatCapacity       Int
+  rcDocKey           String?
+  insuranceDocKey    String?
+  insuranceExpiresAt DateTime?
+  verificationStatus VerificationStatus @default(PENDING)
+  active             Boolean            @default(true)
+  owner              User               @relation(fields: [ownerUserId], references: [id])
+  rides              Ride[]
+  rentalListing      RentalListing?
+  allocations        GroupAllocation[]
+  createdAt          DateTime           @default(now())
+
+  @@index([ownerUserId])
+}
+
+model Ride {
+  id                String        @id @default(uuid()) @db.Uuid
+  type              RideType      @default(CARPOOL)
+  title             String?
+  driverUserId      String        @db.Uuid
+  vehicleId         String        @db.Uuid
+  originName        String
+  originLat         Float
+  originLng         Float
+  destName          String
+  destLat           Float
+  destLng           Float
+  departureAt       DateTime
+  distanceMeters    Int
+  durationSeconds   Int
+  routeProvider     String
+  totalSeats        Int
+  availableSeats    Int
+  pricePerSeatPaise BigInt
+  bookingMode       BookingMode   @default(APPROVAL)
+  status            RideStatus    @default(PUBLISHED)
+  checklist         Json?
+  cancelReason      String?
+  driver            User          @relation("RideDriver", fields: [driverUserId], references: [id])
+  vehicle           Vehicle       @relation(fields: [vehicleId], references: [id])
+  bookings          RideBooking[]
+  createdAt         DateTime      @default(now())
+
+  @@index([departureAt, status])
+  @@index([driverUserId])
+}
+
+model RideBooking {
+  id                   String        @id @default(uuid()) @db.Uuid
+  rideId               String        @db.Uuid
+  passengerUserId      String        @db.Uuid
+  seatsRequested       Int
+  pricePerSeatSnapshot BigInt
+  totalPaise           BigInt
+  status               BookingStatus
+  paymentStatus        PaymentStatus @default(UNPAID)
+  participants         Json?
+  idempotencyKey       String?       @unique
+  ride                 Ride          @relation(fields: [rideId], references: [id])
+  passenger            User          @relation(fields: [passengerUserId], references: [id])
+  createdAt            DateTime      @default(now())
+
+  @@index([passengerUserId])
+  @@index([rideId])
+}
+
+model RentalListing {
+  id                   String          @id @default(uuid()) @db.Uuid
+  ownerUserId          String          @db.Uuid
+  vehicleId            String          @unique @db.Uuid
+  city                 String
+  pickupAddress        String
+  rentalMode           RentalMode
+  pricePerDayPaise     BigInt
+  securityDepositPaise BigInt
+  includedKmPerDay     Int
+  extraKmChargePaise   BigInt
+  helmetIncluded       Boolean         @default(false)
+  cancellationPolicy   String
+  active               Boolean         @default(true)
+  owner                User            @relation(fields: [ownerUserId], references: [id])
+  vehicle              Vehicle         @relation(fields: [vehicleId], references: [id])
+  bookings             RentalBooking[]
+
+  @@index([city])
+}
+
+model RentalBooking {
+  id                    String        @id @default(uuid()) @db.Uuid
+  listingId             String        @db.Uuid
+  vehicleId             String        @db.Uuid
+  renterUserId          String        @db.Uuid
+  startAt               DateTime
+  endAt                 DateTime
+  plannedDistanceMeters Int
+  pricePerDaySnapshot   BigInt
+  depositSnapshot       BigInt
+  totalPaise            BigInt
+  status                RentalStatus  @default(PENDING)
+  paymentStatus         PaymentStatus @default(UNPAID)
+  pickupChecklist       Json?
+  returnChecklist       Json?
+  listing               RentalListing @relation(fields: [listingId], references: [id])
+  renter                User          @relation(fields: [renterUserId], references: [id])
+  createdAt             DateTime      @default(now())
+
+  @@index([vehicleId])
+  @@index([renterUserId])
+}
+
+model GroupRequest {
+  id                String             @id @default(uuid()) @db.Uuid
+  organizerUserId   String             @db.Uuid
+  originName        String
+  destName          String
+  departureAt       DateTime
+  returnAt          DateTime
+  distanceMeters    Int
+  passengerCount    Int
+  luggageNotes      String?
+  vehiclePreference String
+  budgetTotalPaise  BigInt?
+  status            GroupStatus        @default(OPEN_FOR_QUOTES)
+  organizer         User               @relation(fields: [organizerUserId], references: [id])
+  quotes            GroupQuote[]
+  participants      GroupParticipant[]
+  createdAt         DateTime           @default(now())
+}
+
+model GroupQuote {
+  id                String            @id @default(uuid()) @db.Uuid
+  groupRequestId    String            @db.Uuid
+  operatorUserId    String            @db.Uuid
+  totalPricePaise   BigInt
+  vehiclePlan       String
+  inclusions        String            @default("")
+  cancellationTerms String
+  validUntil        DateTime
+  status            QuoteStatus       @default(SUBMITTED)
+  request           GroupRequest      @relation(fields: [groupRequestId], references: [id])
+  operator          User              @relation(fields: [operatorUserId], references: [id])
+  allocations       GroupAllocation[]
+  createdAt         DateTime          @default(now())
+
+  @@unique([groupRequestId, operatorUserId])
+}
+
+model GroupAllocation {
+  id                 String            @id @default(uuid()) @db.Uuid
+  groupQuoteId       String            @db.Uuid
+  vehicleId          String            @db.Uuid
+  assignedPassengers Int
+  startAt            DateTime
+  endAt              DateTime
+  active             Boolean           @default(true)
+  quote              GroupQuote        @relation(fields: [groupQuoteId], references: [id])
+  vehicle            Vehicle           @relation(fields: [vehicleId], references: [id])
+  driverAssignment   DriverAssignment?
+}
+
+model DriverAssignment {
+  id                String          @id @default(uuid()) @db.Uuid
+  groupAllocationId String          @unique @db.Uuid
+  driverUserId      String          @db.Uuid
+  startAt           DateTime
+  endAt             DateTime
+  active            Boolean         @default(true)
+  allocation        GroupAllocation @relation(fields: [groupAllocationId], references: [id])
+  driver            User            @relation(fields: [driverUserId], references: [id])
+}
+
+model GroupParticipant {
+  id             String       @id @default(uuid()) @db.Uuid
+  groupRequestId String       @db.Uuid
+  name           String
+  phoneEnc       String?
+  notes          String?
+  request        GroupRequest @relation(fields: [groupRequestId], references: [id])
+}
+
+model Payment {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @db.Uuid
+  bookingType    String
+  bookingId      String   @db.Uuid
+  purpose        String
+  amountPaise    BigInt
+  provider       String   @default("mock")
+  status         String
+  idempotencyKey String   @unique
+  createdAt      DateTime @default(now())
+
+  @@index([bookingType, bookingId])
+}
+
+model Review {
+  id            String   @id @default(uuid()) @db.Uuid
+  rideBookingId String   @unique @db.Uuid
+  reviewerId    String   @db.Uuid
+  revieweeId    String   @db.Uuid
+  rating        Int
+  comment       String?
+  createdAt     DateTime @default(now())
+
+  @@index([revieweeId])
+}
+
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  type      String
+  payload   Json
+  readAt    DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String   @db.Uuid
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+}
