@@ -3,11 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "predev": "prisma generate",
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "build": "prisma generate && tsc",
     "start": "node dist/server.js",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "tsx prisma/seed.ts",
+    "db:seed": "prisma generate && tsx prisma/seed.ts",
+    "pretest": "prisma generate",
     "test": "vitest run"
   },
   "prisma": { "seed": "tsx prisma/seed.ts" },
