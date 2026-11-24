@@ -70,3 +70,80 @@ adminRouter.post('/admin/users/:id/suspend', ...admin, validate({ params: z.obje
     ]);
     ok(res, { suspended: true });
   }));
+
+// ---------- Admin dashboard data: everything that happens on the platform ----------
+
+const contact = (u: { email: string | null; phone: string | null }) => u.email ?? u.phone ?? '';
+
+/** Headline numbers for the dashboard. Money is in paise. */
+adminRouter.get('/admin/overview', ...admin, h(async (_req, res) => {
+  const paid = { in: ['CONFIRMED', 'COMPLETED'] as const };
+  const [users, drivers, ridesOpen, bookings, pendingBookings, rideRevenue, rentalRevenue, rentals, groups, vehiclesPending] = await Promise.all([
+    prisma.user.count(),
+    prisma.driverProfile.groupBy({ by: ['verificationStatus'], _count: true }),
+    prisma.ride.count({ where: { status: { in: ['PUBLISHED', 'STARTED'] } } }),
+    prisma.rideBooking.count(),
+    prisma.rideBooking.count({ where: { status: 'PENDING' } }),
+    prisma.rideBooking.aggregate({ _sum: { totalPaise: true }, where: { status: { in: [...paid.in] } } }),
+    prisma.rentalBooking.aggregate({ _sum: { totalPaise: true }, where: { status: { in: ['CONFIRMED', 'ACTIVE', 'RETURNED'] } } }),
+    prisma.rentalBooking.count(),
+    prisma.groupRequest.count(),
+    prisma.vehicle.count({ where: { verificationStatus: 'PENDING' } }),
+  ]);
+  const byStatus = Object.fromEntries(drivers.map(d => [d.verificationStatus, d._count]));
+  ok(res, {
+    users, ridesOpen, rideBookings: bookings, pendingRideRequests: pendingBookings, rentalBookings: rentals, groupRequests: groups,
+    driversPending: byStatus.PENDING ?? 0, driversApproved: byStatus.APPROVED ?? 0, driversRejected: byStatus.REJECTED ?? 0, vehiclesPending,
+    bookedValuePaise: (rideRevenue._sum.totalPaise ?? 0n) + (rentalRevenue._sum.totalPaise ?? 0n),
+  });
+}));
+
+/** Every driver (not only pending): who they are, licence status, how many rides they run. */
+adminRouter.get('/admin/drivers', ...admin, h(async (_req, res) => {
+  const rows = await prisma.driverProfile.findMany({
+    orderBy: [{ verificationStatus: 'asc' }], take: 300,
+    include: { user: { select: { id: true, fullName: true, email: true, phone: true, suspended: true, createdAt: true, _count: { select: { ridesDriven: true } } } } },
+  });
+  ok(res, rows.map(d => ({
+    id: d.id, userId: d.user.id, name: d.user.fullName, contact: contact(d.user), joinedAt: d.user.createdAt, suspended: d.user.suspended,
+    licence: mask(decrypt(d.licenceNumberEnc)), licenceExpiresAt: d.licenceExpiresAt, docKey: d.licenceDocKey,
+    status: d.verificationStatus, rejectionReason: d.rejectionReason, rides: d.user._count.ridesDriven,
+    rating: d.ratingCount ? Number(d.ratingAverage.toFixed(1)) : null,
+  })));
+}));
+
+/** Every ride request: who asked, which ride (from → to, when, driver), how many seats, how much, status. */
+adminRouter.get('/admin/ride-bookings', ...admin, validate({ query: z.object({ status: z.enum(['PENDING', 'CONFIRMED', 'REJECTED', 'CANCELLED', 'COMPLETED']).optional() }) }),
+  h(async (req, res) => {
+    const rows = await prisma.rideBooking.findMany({
+      where: req.query.status ? { status: req.query.status as never } : {},
+      orderBy: { createdAt: 'desc' }, take: 300,
+      include: {
+        passenger: { select: { fullName: true, email: true, phone: true } },
+        ride: { select: { originName: true, destName: true, departureAt: true, distanceMeters: true, driver: { select: { fullName: true, email: true, phone: true } } } },
+      },
+    });
+    ok(res, rows.map(b => ({
+      id: b.id, requestedAt: b.createdAt, status: b.status, paymentStatus: b.paymentStatus,
+      passenger: b.passenger.fullName, passengerContact: contact(b.passenger),
+      driver: b.ride.driver.fullName, driverContact: contact(b.ride.driver),
+      origin: b.ride.originName, destination: b.ride.destName, departureAt: b.ride.departureAt, distanceKm: Math.round(b.ride.distanceMeters / 1000),
+      seats: b.seatsRequested, pricePerSeatPaise: b.pricePerSeatSnapshot, totalPaise: b.totalPaise,
+    })));
+  }));
+
+/** Every rental booking: renter, vehicle, owner, dates, amount, status. */
+adminRouter.get('/admin/rental-bookings', ...admin, h(async (_req, res) => {
+  const rows = await prisma.rentalBooking.findMany({
+    orderBy: { createdAt: 'desc' }, take: 300,
+    include: {
+      renter: { select: { fullName: true, email: true, phone: true } },
+      listing: { select: { city: true, owner: { select: { fullName: true } }, vehicle: { select: { make: true, model: true } } } },
+    },
+  });
+  ok(res, rows.map(b => ({
+    id: b.id, requestedAt: b.createdAt, status: b.status, paymentStatus: b.paymentStatus,
+    renter: b.renter.fullName, renterContact: contact(b.renter), owner: b.listing.owner.fullName,
+    vehicle: `${b.listing.vehicle.make} ${b.listing.vehicle.model}`, city: b.listing.city, startAt: b.startAt, endAt: b.endAt, totalPaise: b.totalPaise,
+  })));
+}));

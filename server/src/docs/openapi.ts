@@ -30,7 +30,7 @@ export function openApiDoc() {
       responses: Object.fromEntries([[200, { description: 'Success' }], ...(opts.errors ?? []).map(c => [c, { description: ERRORS[c] }])]),
     });
 
-  path('post', '/auth/otp/request', 'Auth', 'Send OTP', { body: otpRequestSchema, auth: false });
+  path('post', '/auth/otp/request', 'Auth', 'Send OTP by SMS (phone) or email — signs in, or signs up on first verify', { body: otpRequestSchema, auth: false, errors: [429, 503] });
   path('post', '/auth/otp/verify', 'Auth', 'Verify OTP and sign in', { body: otpVerifySchema, auth: false, errors: [401, 429] });
   path('post', '/auth/refresh', 'Auth', 'Rotate refresh token', { body: refreshSchema, auth: false, errors: [401] });
   path('get', '/users/me', 'Users', 'Current profile', { errors: [401] });

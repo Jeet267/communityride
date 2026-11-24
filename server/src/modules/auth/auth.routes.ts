@@ -4,23 +4,28 @@ import { validate } from '../../middleware/validate';
 import { h } from '../../utils/asyncHandler';
 import { ok } from '../../utils/response';
 import * as svc from './auth.service';
-import { otpRequestSchema, otpVerifySchema, refreshSchema } from './auth.schema';
+import { otpRequestSchema, otpVerifySchema, passwordLoginSchema, refreshSchema } from './auth.schema';
 
 export const authRouter = Router();
-// 5 OTP requests per phone per 10 min (keyed by phone, so a demo laptop can switch between accounts),
-// plus a looser per-IP cap to stop one client spraying many numbers.
+
+// 5 codes per phone/email per 10 min (so a demo laptop can switch accounts), plus a looser per-IP cap.
 const tooMany = (_req: Request, res: Response) => res.status(429).json({
   success: false, error: { code: 'RATE_LIMITED', message: 'Too many OTP requests. Try again in a few minutes.', fieldErrors: [] },
   meta: { requestId: res.locals.requestId },
 });
-const otpPerPhone = rateLimit({ windowMs: 10 * 60_000, limit: 5, standardHeaders: true, legacyHeaders: false,
-  keyGenerator: req => `phone:${String(req.body?.phone ?? '')}`, handler: tooMany });
-const otpPerIp = rateLimit({ windowMs: 10 * 60_000, limit: 60, standardHeaders: true, legacyHeaders: false, handler: tooMany });
+const perIdentifier = rateLimit({ windowMs: 10 * 60_000, limit: 5, standardHeaders: true, legacyHeaders: false, handler: tooMany,
+  keyGenerator: req => `id:${String(req.body?.email ?? req.body?.phone ?? '').toLowerCase()}` });
+const perIp = rateLimit({ windowMs: 10 * 60_000, limit: 60, standardHeaders: true, legacyHeaders: false, handler: tooMany });
 
-authRouter.post('/auth/otp/request', otpPerIp, otpPerPhone, validate({ body: otpRequestSchema }),
-  h(async (req, res) => { svc.requestOtp(req.body.phone); ok(res, { sent: true }); }));
+// Sign in OR sign up: { email } or { phone } → code by email or SMS. New accounts are created on verify.
+authRouter.post('/auth/otp/request', perIp, perIdentifier, validate({ body: otpRequestSchema }),
+  h(async (req, res) => { const r = await svc.requestOtp(req.body); ok(res, { sent: true, ...r }); }));
+
 authRouter.post('/auth/otp/verify', validate({ body: otpVerifySchema }),
-  h(async (req, res) => ok(res, await svc.verifyOtp(req.body.phone, req.body.otp, req.body.fullName))));
+  h(async (req, res) => ok(res, await svc.verifyOtp({ phone: req.body.phone, email: req.body.email }, req.body.otp, req.body.fullName, req.body.loginAs))));
+// Admins: email + password (rate-limited like OTP: 5 tries per email per 10 min).
+authRouter.post('/auth/password/login', perIp, perIdentifier, validate({ body: passwordLoginSchema }),
+  h(async (req, res) => ok(res, await svc.passwordLogin(req.body.email, req.body.password))));
 authRouter.post('/auth/refresh', validate({ body: refreshSchema }),
   h(async (req, res) => ok(res, await svc.refresh(req.body.refreshToken))));
 authRouter.post('/auth/logout', validate({ body: refreshSchema }),

@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import { api, getRefreshToken, refreshSession, setSession } from './api';
 
 export type Me = {
-  id: string; fullName: string; phone: string; email: string | null; roles: string[];
+  id: string; fullName: string; phone: string | null; email: string | null; roles: string[];
   driverStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | null; driverRejectionReason: string | null;
 };
 type Ctx = {

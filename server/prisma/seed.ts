@@ -2,14 +2,15 @@
 import { Role, VehicleCategory } from '@prisma/client';
 import { prisma } from '../src/config/prisma';
 import { encrypt } from '../src/utils/crypto';
+import { createAdmin } from './create-admin';
 const days = (n: number, hourIst = 7) => {
   const d = new Date(Date.now() + n * 864e5);
   d.setUTCHours(hourIst - 6, 30, 0, 0); // hourIst:00 IST = (hourIst - 5:30) UTC
   return d;
 };
 
-async function user(phone: string, fullName: string, roles: Role[]) {
-  return prisma.user.upsert({ where: { phone }, update: { fullName }, create: { phone, fullName, roles: { create: roles.map(role => ({ role })) } } });
+async function user(phone: string, fullName: string, roles: Role[], email?: string) {
+  return prisma.user.upsert({ where: { phone }, update: { fullName, email }, create: { phone, email, fullName, roles: { create: roles.map(role => ({ role })) } } });
 }
 async function driver(userId: string) {
   await prisma.driverProfile.upsert({ where: { userId }, update: {}, create: {
@@ -20,15 +21,16 @@ const vehicle = (ownerUserId: string, category: VehicleCategory, make: string, m
   prisma.vehicle.create({ data: { ownerUserId, category, make, model, seatCapacity, registrationEnc: encrypt(reg), verificationStatus: 'APPROVED' } });
 
 async function main() {
+  await createAdmin(); // password admin from server/.env — runs even when demo data already exists
   if (await prisma.ride.count()) { console.log('Database already has data. Run `npx prisma migrate reset` to reseed.'); return; }
 
-  await user('+919000000001', 'RideMate Admin', ['PASSENGER', 'ADMIN']);
-  const ravi = await user('+919000000002', 'Ravi Sharma', ['PASSENGER', 'DRIVER']);
+  await user('+919000000001', 'RideMate Admin', ['PASSENGER', 'ADMIN'], 'admin@ridemate.demo');
+  const ravi = await user('+919000000002', 'Ravi Sharma', ['PASSENGER', 'DRIVER'], 'ravi@ridemate.demo');
   await driver(ravi.id);
-  const priya = await user('+919000000003', 'Priya Verma', ['PASSENGER']);
-  const arjun = await user('+919000000004', 'Arjun Mehta', ['PASSENGER', 'RENTAL_OWNER']);
-  const fleet = await user('+919000000005', 'Shree Travels', ['PASSENGER', 'FLEET_OPERATOR']);
-  const neha = await user('+919000000006', 'Neha Gupta', ['PASSENGER']);
+  const priya = await user('+919000000003', 'Priya Verma', ['PASSENGER'], 'priya@ridemate.demo');
+  const arjun = await user('+919000000004', 'Arjun Mehta', ['PASSENGER', 'RENTAL_OWNER'], 'arjun@ridemate.demo');
+  const fleet = await user('+919000000005', 'Shree Travels', ['PASSENGER', 'FLEET_OPERATOR'], 'fleet@ridemate.demo');
+  const neha = await user('+919000000006', 'Neha Gupta', ['PASSENGER'], 'neha@ridemate.demo');
   const fleetDrivers = [];
   for (const [i, name] of ['Mohan Lal', 'Suresh Yadav', 'Imran Khan'].entries()) {
     const d = await user(`+91900000001${i}`, name, ['PASSENGER', 'DRIVER']);
@@ -92,7 +94,7 @@ async function main() {
     inclusions: 'Fuel, tolls, driver allowance', cancellationTerms: 'Full refund up to 7 days before departure.', validUntil: days(8),
   } });
 
-  console.log('Seeded. Demo OTP 123456 for phones +919000000001 … +919000000012');
+  console.log('Seeded. Demo OTP 123456 for phones +919000000001 … +919000000012 and emails *@ridemate.demo');
 }
 
 main().catch(e => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());

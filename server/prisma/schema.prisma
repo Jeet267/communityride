@@ -35,6 +35,12 @@ enum RideType {
   GROUP_TOUR
 }
 
+enum Luggage {
+  SMALL // a backpack per seat
+  MEDIUM // one cabin-size bag per seat
+  LARGE // a big suitcase per seat
+}
+
 enum RideStatus {
   PUBLISHED
   STARTED
@@ -92,8 +98,9 @@ enum QuoteStatus {
 model User {
   id                String             @id @default(uuid()) @db.Uuid
   fullName          String
-  phone             String             @unique
+  phone             String?            @unique // optional: an account can sign up with email only
   email             String?            @unique
+  passwordHash      String?            // scrypt hash; only admins sign in with a password
   suspended         Boolean            @default(false)
   roles             UserRoleRow[]
   refreshTokens     RefreshToken[]
@@ -183,6 +190,7 @@ model Ride {
   availableSeats    Int
   pricePerSeatPaise BigInt
   bookingMode       BookingMode   @default(APPROVAL)
+  luggage           Luggage       @default(MEDIUM) // luggage allowed per seat
   status            RideStatus    @default(PUBLISHED)
   checklist         Json?
   cancelReason      String?

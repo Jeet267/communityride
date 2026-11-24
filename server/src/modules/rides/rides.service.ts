@@ -5,11 +5,11 @@ import { notify } from '../../utils/notify';
 import { getValidatedRoute } from '../routing/routing';
 import { assertVerifiedDriver } from '../drivers/drivers.service';
 import { assertUsableVehicle } from '../vehicles/vehicles.service';
-import { EditRideInput, PublishRideInput, SearchRidesInput } from './rides.schema';
+import { EditRideInput, PublishRideInput, SearchRidesInput, SharedRidesInput } from './rides.schema';
 
 export const rideInclude = {
   driver: { select: { id: true, fullName: true, driverProfile: { select: { ratingAverage: true, ratingCount: true } } } },
-  vehicle: { select: { make: true, model: true, category: true } },
+  vehicle: { select: { make: true, model: true, category: true, seatCapacity: true } },
 } satisfies Prisma.RideInclude;
 type RideWith = Prisma.RideGetPayload<{ include: typeof rideInclude }>;
 
@@ -17,9 +17,10 @@ export const toRideDto = (r: RideWith) => ({
   id: r.id, type: r.type, title: r.title, origin: r.originName, destination: r.destName, departureAt: r.departureAt,
   distanceKm: Math.round(r.distanceMeters / 1000), durationMin: Math.round(r.durationSeconds / 60),
   totalSeats: r.totalSeats, seatsLeft: r.availableSeats, pricePerSeatPaise: r.pricePerSeatPaise,
-  bookingMode: r.bookingMode, status: r.status,
+  bookingMode: r.bookingMode, status: r.status, luggage: r.luggage,
+  seatsBooked: r.totalSeats - r.availableSeats, // seats other passengers already hold: this is a shared ride
   driver: { id: r.driver.id, name: r.driver.fullName, rating: r.driver.driverProfile?.ratingAverage ?? 0, ratingCount: r.driver.driverProfile?.ratingCount ?? 0 },
-  vehicle: `${r.vehicle.make} ${r.vehicle.model}`, vehicleCategory: r.vehicle.category,
+  vehicle: `${r.vehicle.make} ${r.vehicle.model}`, vehicleCategory: r.vehicle.category, vehicleSeats: r.vehicle.seatCapacity,
 });
 
 const TOUR_VEHICLES = ['BUS', 'MINI_BUS', 'TEMPO_TRAVELLER'];
@@ -36,7 +37,7 @@ export async function publishRide(driverId: string, input: PublishRideInput) {
   const route = await getValidatedRoute(input.origin, input.destination);
   const ride = await prisma.ride.create({
     data: {
-      type: input.type, title: input.title, driverUserId: driverId, vehicleId: v.id,
+      type: input.type, title: input.title, driverUserId: driverId, vehicleId: v.id, luggage: input.luggage,
       originName: input.origin.name, originLat: input.origin.lat, originLng: input.origin.lng,
       destName: input.destination.name, destLat: input.destination.lat, destLng: input.destination.lng,
       departureAt: input.departureAt, distanceMeters: route.distanceMeters, durationSeconds: route.durationSeconds,
@@ -60,6 +61,19 @@ export async function searchRides(q: SearchRidesInput) {
       destLat: { gte: q.destLat - BOX, lte: q.destLat + BOX }, destLng: { gte: q.destLng - BOX, lte: q.destLng + BOX },
     },
     include: rideInclude, orderBy: { departureAt: 'asc' }, take: 50,
+  });
+  return rides.map(toRideDto);
+}
+
+/** Cab sharing: every upcoming carpool that still has seats, soonest first. Filters match city names loosely. */
+export async function listSharedRides(q: SharedRidesInput) {
+  const rides = await prisma.ride.findMany({
+    where: {
+      type: 'CARPOOL', status: 'PUBLISHED', availableSeats: { gte: q.seats }, departureAt: { gt: new Date() },
+      ...(q.from ? { originName: { contains: q.from, mode: 'insensitive' as const } } : {}),
+      ...(q.to ? { destName: { contains: q.to, mode: 'insensitive' as const } } : {}),
+    },
+    include: rideInclude, orderBy: { departureAt: 'asc' }, take: 60,
   });
   return rides.map(toRideDto);
 }

@@ -9,6 +9,7 @@ import { localInput, localToIso, toPaise } from '@/lib/format';
 import { RequireAuth } from '@/components/layout/RequireAuth';
 import { PlaceInput } from '@/components/rides/PlaceInput';
 import { Button, Card, ErrorBanner, Field, Page, PageHeader, Select } from '@/components/ui';
+import { LUGGAGE } from '@/components/rides/RideCard';
 
 type Vehicle = { id: string; category: string; make: string; model: string; seatCapacity: number; verificationStatus: string; registration: string };
 const TOUR = ['BUS', 'MINI_BUS', 'TEMPO_TRAVELLER'];
@@ -20,14 +21,14 @@ function PublishForm() {
   const [type, setType] = useState<'CARPOOL' | 'GROUP_TOUR'>('CARPOOL');
   const [from, setFrom] = useState<Place | null>(null);
   const [to, setTo] = useState<Place | null>(null);
-  const [f, setF] = useState({ vehicleId: '', departure: localInput(1, 7), seats: 3, price: '450', approval: true, title: '' });
+  const [f, setF] = useState({ vehicleId: '', departure: localInput(1, 7), seats: 3, price: '450', approval: true, title: '', luggage: 'MEDIUM' });
   const set = (k: keyof typeof f, v: any) => setF(p => ({ ...p, [k]: v }));
   const options = approved.filter(v => (type === 'GROUP_TOUR' ? TOUR.includes(v.category) : !TOUR.includes(v.category)));
 
   const publish = useMutation({
     mutationFn: () => api('/rides', { method: 'POST', body: {
       type, vehicleId: f.vehicleId || options[0]?.id, origin: from, destination: to, departureAt: localToIso(f.departure),
-      availableSeats: Number(f.seats), pricePerSeatPaise: toPaise(f.price), bookingMode: f.approval ? 'APPROVAL' : 'INSTANT',
+      availableSeats: Number(f.seats), pricePerSeatPaise: toPaise(f.price), bookingMode: f.approval ? 'APPROVAL' : 'INSTANT', luggage: f.luggage,
       ...(type === 'GROUP_TOUR' ? { title: f.title } : {}),
     } }),
     onSuccess: () => router.push('/driver'),
@@ -74,6 +75,9 @@ function PublishForm() {
           <Field label="Seats offered" type="number" min={1} max={60} value={f.seats} onChange={e => set('seats', e.target.value)} />
           <Field label="Price per seat (₹)" type="number" min={0} step="10" value={f.price} onChange={e => set('price', e.target.value)} />
         </div>
+        <Select label="Luggage allowed per seat" value={f.luggage} onChange={e => set('luggage', e.target.value)}>
+          {Object.entries(LUGGAGE).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </Select>
         <label className="flex items-center gap-3 text-[15px]">
           <input type="checkbox" checked={f.approval} onChange={e => set('approval', e.target.checked)} className="h-4 w-4 accent-route" />
           I want to approve each booking request

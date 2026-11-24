@@ -11,6 +11,7 @@ export const publishRideSchema = z.object({
   availableSeats: z.number().int().min(1).max(60),
   pricePerSeatPaise: z.number().int().min(0).max(1_000_000),
   bookingMode: z.enum(['INSTANT', 'APPROVAL']).default('APPROVAL'),
+  luggage: z.enum(['SMALL', 'MEDIUM', 'LARGE']).default('MEDIUM'),
   type: z.enum(['CARPOOL', 'GROUP_TOUR']).default('CARPOOL'),
   title: z.string().min(5).max(120).optional(),
 });
@@ -31,3 +32,11 @@ export const searchRidesSchema = z.object({
   seats: z.coerce.number().int().min(1).max(60).default(1),
 });
 export type SearchRidesInput = z.infer<typeof searchRidesSchema>;
+
+/** Browse every upcoming shared ride (cab sharing), optionally filtered by city names. */
+export const sharedRidesSchema = z.object({
+  from: z.string().trim().max(60).optional(),
+  to: z.string().trim().max(60).optional(),
+  seats: z.coerce.number().int().min(1).max(60).default(1),
+});
+export type SharedRidesInput = z.infer<typeof sharedRidesSchema>;

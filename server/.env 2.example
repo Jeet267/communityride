@@ -1,0 +1,13 @@
+NODE_ENV=development
+PORT=4000
+DATABASE_URL=postgresql://ridemate:ridemate@localhost:5432/ridemate
+TEST_DATABASE_URL=postgresql://ridemate:ridemate@localhost:5432/ridemate_test
+JWT_ACCESS_SECRET=dev-access-secret-at-least-32-characters
+# node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000
+CLIENT_ORIGIN=http://localhost:3000
+ROUTING_PROVIDER=osrm
+MAX_JOURNEY_METERS=500000
+DEMO_OTP=123456
+TRIP_START_WINDOW_MINUTES=2880
+UPLOAD_DIR=uploads-private

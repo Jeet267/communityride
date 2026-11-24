@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth';
 import { Arrow, ButtonLink } from '../ui';
 import { Logo } from './Logo';
 import { NotificationBell } from './NotificationBell';
+import { homeFor, ROLE_LABEL, type Role } from '@/lib/roles';
 
 type Item = { href: string; label: string; hint?: string };
 
@@ -67,7 +68,9 @@ export function Navbar() {
                 </button>
                 <div className="invisible absolute right-0 top-full z-50 w-56 pt-2 opacity-0 transition group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100">
                   <div className="rounded-card border border-line bg-white p-2 shadow-frame">
-                    <p className="px-3 py-2 text-sm"><span className="block font-semibold">{user.fullName}</span><span className="text-muted">{user.phone}</span></p>
+                    <p className="px-3 py-2 text-sm"><span className="block font-semibold">{user.fullName}</span><span className="text-muted">{user.email ?? user.phone}</span>
+                      <span className="mt-1 block text-xs text-muted">{user.roles.filter(r => r !== 'PASSENGER').map(r => ROLE_LABEL[r as Role]).join(' · ') || 'Passenger'}</span></p>
+                    <Link href={homeFor(user.roles)} className="block rounded-xl px-3 py-2 text-sm font-semibold hover:bg-canvas">My dashboard</Link>
                     <Link href="/bookings" className="block rounded-xl px-3 py-2 text-sm hover:bg-canvas">My bookings</Link>
                     <Link href="/groups" className="block rounded-xl px-3 py-2 text-sm hover:bg-canvas">My group trips</Link>
                     <button onClick={async () => { await signOut(); router.push('/'); }} className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-canvas">Sign out</button>

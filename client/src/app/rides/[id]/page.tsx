@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { fmtDateTime, fmtDuration, newKey, rupees } from '@/lib/format';
-import { Ride } from '@/components/rides/RideCard';
+import { LUGGAGE, Ride } from '@/components/rides/RideCard';
 import { Badge, Button, Card, ErrorBanner, Field, Page, Spinner } from '@/components/ui';
 
 export default function RideDetail({ params }: { params: { id: string } }) {
@@ -52,7 +52,7 @@ export default function RideDetail({ params }: { params: { id: string } }) {
         <h1 className="mt-2 text-3xl font-bold tracking-[-0.03em] md:text-4xl">{ride.origin} → {ride.destination}</h1>
         <p className="mt-2 text-lg text-muted">{fmtDateTime(ride.departureAt)}</p>
         <dl className="mt-8 grid gap-4 sm:grid-cols-3">
-          {[['Distance by road', `${ride.distanceKm} km`], ['Driving time', fmtDuration(ride.durationMin)], ['Seats left', `${ride.seatsLeft} of ${ride.totalSeats}`]].map(([k, v]) => (
+          {[['Distance by road', `${ride.distanceKm} km`], ['Driving time', fmtDuration(ride.durationMin)], ['Seats left', `${ride.seatsLeft} of ${ride.totalSeats}`], ['Already joined', ride.seatsBooked ? `${ride.seatsBooked} ${ride.seatsBooked === 1 ? 'person' : 'people'}` : 'Be the first'], ['Luggage', LUGGAGE[ride.luggage]], ['Vehicle', `${ride.vehicle} · ${ride.vehicleSeats} seats`]].map(([k, v]) => (
             <div key={k} className="rounded-xl bg-canvas p-4"><dt className="text-sm text-muted">{k}</dt><dd className="mt-1 text-lg font-semibold">{v}</dd></div>
           ))}
         </dl>
